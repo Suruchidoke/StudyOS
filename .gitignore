@@ -1,0 +1,25 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Secrets & Environment Variables (NEVER PUSH SECRETS TO GIT)
+.env
+*.env
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Data & SQLite Database (optional: keep directory tracked with .gitkeep)
+**/data/*.db
+**/data/*.sqlite3
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
