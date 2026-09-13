@@ -220,3 +220,82 @@ def delete_task_by_id(task_id: int) -> str:
     if success:
         return f"Task '{task.title}' (ID {task_id}) has been permanently deleted from your schedule."
     return f"Failed to delete task ID {task_id}."
+
+
+def get_weekly_summary() -> dict:
+    """Use this when the student asks for a weekly progress report, summary, or overview of what's due soon.
+    Returns completion rate, tasks due in the next 7 days, and subjects at high risk.
+    """
+    from datetime import timedelta
+    today = datetime.now().date()
+    week_end = today + timedelta(days=7)
+
+    subjects = get_all_subjects()
+    tasks = get_all_tasks()
+
+    completed = [t for t in tasks if t.status == "Completed"]
+    pending = [t for t in tasks if t.status == "Pending"]
+    skipped = [t for t in tasks if t.status == "Skipped"]
+
+    due_this_week = []
+    for t in tasks:
+        if t.status in ("Completed", "Skipped") or not t.deadline:
+            continue
+        try:
+            dl = datetime.strptime(t.deadline, "%Y-%m-%d").date()
+            if today <= dl <= week_end:
+                sub_name = next((s.name for s in subjects if s.id == t.subject_id), "Unknown")
+                due_this_week.append({"title": t.title, "subject": sub_name, "deadline": t.deadline, "remaining_mins": t.remaining_minutes})
+        except ValueError:
+            pass
+
+    high_risk = []
+    for s in subjects:
+        sub_tasks = [t for t in tasks if t.subject_id == s.id]
+        risk = calculate_subject_risk(s, sub_tasks)
+        if risk["risk_level"] in ("High", "Critical"):
+            high_risk.append({"subject": s.name, "risk_level": risk["risk_level"], "score": risk["risk_score"]})
+
+    return {
+        "summary_date": str(today),
+        "total_subjects": len(subjects),
+        "total_tasks": len(tasks),
+        "completed_tasks": len(completed),
+        "pending_tasks": len(pending),
+        "skipped_tasks": len(skipped),
+        "completion_rate_pct": round(len(completed) / max(1, len(tasks)) * 100),
+        "tasks_due_this_week": due_this_week,
+        "high_risk_subjects": high_risk,
+    }
+
+
+def generate_quiz(subject_name: str, num_questions: int = 5) -> dict:
+    """Use this when the student asks to be quizzed, tested, or wants practice questions for a subject.
+    Provide the context needed so you can then generate the quiz in your reply.
+    - subject_name: Name of the subject to quiz on (e.g., 'DBMS', 'Operating Systems').
+    - num_questions: Number of quiz questions to generate (1-10, default 5).
+    """
+    subject = get_subject_by_name(subject_name)
+    if not subject:
+        all_subs = get_all_subjects()
+        names = [s.name for s in all_subs]
+        return {"error": f"Subject '{subject_name}' not found. Available: {', '.join(names) or 'None'}."}
+
+    num_questions = max(1, min(10, int(num_questions)))
+    tasks = get_all_tasks()
+    sub_tasks = [t for t in tasks if t.subject_id == subject.id]
+    topic_hints = [t.title for t in sub_tasks[:10]]
+
+    return {
+        "subject": subject.name,
+        "mastery_pct": subject.mastery_percentage,
+        "num_questions": num_questions,
+        "topic_hints": topic_hints,
+        "generate_instruction": (
+            f"Generate exactly {num_questions} quiz questions for {subject.name}. "
+            f"Student mastery: {subject.mastery_percentage}% -- adjust difficulty accordingly "
+            f"(lower mastery -> more foundational questions). "
+            f"Topics to draw from: {', '.join(topic_hints) if topic_hints else 'general concepts'}. "
+            "Format each as:\nQ[n]: [question]\nA[n]: [answer]\n\nAfter the quiz, encourage the student."
+        )
+    }
